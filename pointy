@@ -1,0 +1,720 @@
+#!/usr/bin/env perl
+
+package Pointy 0.1;
+
+use strict;
+use warnings;
+use Term::ReadKey;
+use String::ShellQuote;
+use Getopt::Long;
+use IO::Pager::Buffered;
+use Carp qw( croak );
+
+# No magic punctuation
+
+use English qw( -no_match_vars );
+
+# Echo off, unbuffered, signals enabled
+
+ReadMode( 'cbreak' );
+
+# Program variables
+
+my $prog        = __PACKAGE__;
+my $vers        = $prog->VERSION;
+my $title       = "$prog v $vers";
+my $comb        = "\e(0mqvqvqvqvqvqvqj  \e(B";
+my $current_bit = 1;
+my @bits        = ();
+
+# Getopt
+
+my ( $dec_inp, $hex_inp, $noclr, $clrind, $version, $unicode, $ascii, $help );
+
+GetOptions(
+            'decimal=i'        => \$dec_inp,
+            'hexadecimal=s'    => \$hex_inp,
+            'nocolour|nocolor' => \$noclr,
+            'colour|color=i'   => \$clrind,
+            'version'          => \$version,
+            'unicode'          => \$unicode,
+            'ascii'            => \$ascii,
+            'help|?'           => \$help
+) or exit 1;
+
+# Colours
+
+my ( $s_clr, $e_clr, $m_clr ) = init_colours();
+
+# Initialise bit array
+
+for my $i ( '0' .. '31' ) { @bits[ $i ] = 0 }
+
+# ^C handler
+
+local $SIG{ INT } = \&quit;
+
+sub quit
+{
+    # Select a bit that is not in our array, so none will be highlighted
+
+    $current_bit = 0;
+    draw();
+
+    # Reset terminal control settings
+
+    ReadMode( 'normal' );
+
+    # Re-enable cursor
+
+    println( "\e[?25h" );
+    exit;
+}
+
+sub startup
+{
+    if    ( $ascii )   { $comb = q{\_|_|_|_|_|_|_/  } }
+    elsif ( $unicode ) { $comb = q{╰─┴─┴─┴─┴─┴─┴─╯  } }
+
+    if ( $version )
+    {
+        println( $title );
+        exit;
+    }
+    elsif ( $help )
+    {
+        safeprint( "\e[2J" );
+        show_help();
+        exit;
+    }
+
+    safeprint( "\e[?25l\e[2J" );
+
+    if ( defined $dec_inp )
+    {
+        populate( unpack 'H*', reverse pack 'f', $dec_inp );
+        oneshot();
+    }
+    elsif ( defined $hex_inp )
+    {
+        $hex_inp =~ s/^0x//xmsi;
+        populate( $hex_inp );
+        oneshot();
+    }
+
+    # Disable cursor
+
+    draw();
+
+    return;
+}
+
+sub init_colours
+{
+    my ( $setting ) = @_;
+
+    # Colours for sign, exponent, and mantissa
+
+    $clrind //= 0;
+    if ( $clrind < -80 || $clrind > 175)
+    {
+        println( "Colour index out of range: -80 to 175" );
+        exit 1;
+    }
+
+    my ( $s, $e, $m );
+
+    if ( defined $setting && $setting eq 'max' )
+    {
+        $s = '289';
+        $e = '255';
+        $m = '391';
+    }
+    elsif ( defined $setting && $setting eq 'min' )
+    {
+        $s = '35';
+        $e = '1';
+        $m = '137';
+    }
+    else
+    {
+        $s = '114' + $clrind;
+        $e = '80'  + $clrind;
+        $m = '216' + $clrind;
+    }
+
+    return ( $s, $e, $m );
+}
+
+sub println
+{
+    my ( @args ) = @_;
+    print join( q{}, @args ) . "\n" or croak();
+    return;
+}
+
+sub safeprint
+{
+    my ( @args ) = @_;
+    print join q{}, @args or croak();
+    return;
+}
+
+sub oneshot
+{
+    $current_bit = 0;
+    draw();
+    println();
+    quit();
+}
+
+sub set_value
+{
+    my ( $type, $prev_bit ) = @_;
+
+    # Select a bit that is not in our array, but store previous bit
+
+    $prev_bit //= $current_bit;
+    $current_bit = 0;
+
+    draw();
+
+    # Initialise empty vars
+
+    my ( $row, $col, $ret );
+
+    if ( $type eq 'dec' )
+    {
+        $row = '10';
+        $col = '12';
+        $ret = sub {
+            my ( $prev ) = @_;
+            set_value( 'hex', $prev );
+        };
+    }
+    elsif ( $type eq 'hex' )
+    {
+        $row = '11';
+        $col = '14';
+        $ret = sub {
+            my ( $prev ) = @_;
+            $current_bit = $prev;
+            return;
+        };
+    }
+
+    # Initialise custom read_line buffer
+
+    safeprint( "\e[$row;${ col }H" );
+    safeprint( "\e[?25h\e[0K" );
+
+    my $value = read_line( $col, $type );
+
+    # Tab key switches fields
+
+    if ( $value eq chr '9' )
+    {
+        $ret->( $prev_bit );
+
+        # Disable cursor
+        safeprint( "\e[?25l" );
+
+        return;
+    }
+
+    # Disable cursor
+    safeprint( "\e[?25l" );
+
+    # Restore highlighted bit
+    $current_bit = $prev_bit;
+
+    my $hexval;
+    if ( $type eq 'dec' )
+    {
+        $hexval = unpack 'H*', reverse pack 'f', $value;
+    }
+    elsif ( $type eq 'hex' )
+    {
+        $hexval = $value;
+    }
+
+    populate( $hexval );
+
+    return;
+}
+
+sub populate
+{
+    my ( $hexval ) = @_;
+
+    # Calculate value from input
+
+    my $binval = q{};
+    while ( $hexval =~ /(..)/gxms )
+    {
+        my $hexbyte = $1;
+        my $decbyte = hex $hexbyte;
+        my $binbyte = sprintf '%08b', $decbyte;
+        $binval .= $binbyte;
+    }
+
+    # Populate array, remember it is not zero-indexed
+
+    @bits = split //ms, $binval;
+    unshift @bits, q{};
+
+    return;
+}
+
+sub esc_key
+{
+    my ( $line, $bufpos ) = @_;
+
+    # Handle escape sequences in read_line for arrow keys and forwards-delete
+
+    my $key = ReadKey();
+    my $len = length $line;
+    my $esc;
+
+    if ( $key eq '[' )
+    {
+        $key = ReadKey();
+        $esc = 1;
+    }
+
+    if ( $esc )
+    {
+        $len = length $line;
+        if    ( $key eq 'C' ) { $bufpos++ }
+        elsif ( $key eq 'D' ) { $bufpos-- }
+        elsif ( $key eq '3' )
+        {
+            $key = ReadKey();
+            if ( $key eq q{~} )
+            {
+                my $left_part  = substr $line, 0, $bufpos;
+                my $right_part = q{};
+
+                # Remove character in line if not at end of line
+
+                if ( $bufpos < $len )
+                {
+                    $right_part = substr $line, $bufpos + 1;
+                }
+
+                $line = "$left_part$right_part";
+            }
+        }
+        $bufpos = maxcalc( $bufpos, $line );
+    }
+
+    return ( $line, $bufpos );
+}
+
+sub read_line
+{
+    my ( $col, $type ) = @_;
+    my $key    = q{};
+    my $line   = q{};
+    my $bufpos = 0;
+
+    # Hit return key or tab key to exit read_line buffer
+
+    while ( $key ne chr '13' && $key ne chr '10' && $key ne chr '9' )
+    {
+        my $prev_line = $line;
+        my $len       = length $line;
+
+        if ( $key eq chr '127' || $key eq chr '8' )
+        {
+            my $left_part  = substr $line, 0, $bufpos - 1;
+            my $right_part = q{};
+
+            if ( $bufpos && $bufpos < length $line )
+            {
+                $right_part = substr $line, $bufpos;
+            }
+            elsif ( !$bufpos )
+            {
+                $left_part  = q{};
+                $right_part = $line;
+            }
+
+            $line = "$left_part$right_part";
+            $len  = length $line;
+
+            $bufpos--;
+            $bufpos = maxcalc( $bufpos, $line );
+        }
+        elsif ( $key eq chr '27' )
+        {
+            ( $line, $bufpos ) = esc_key( $line, $bufpos );
+        }
+        else
+        {
+            if ( $type eq 'hex' )
+            {
+                $key =~ s/[^A-Fa-f\d]//xms;
+            }
+            elsif ( $type eq 'dec' )
+            {
+                # Strip minus sign if not at start of line
+                if ( $bufpos > 0 ) { $key =~ s/\-//xms }
+
+                # Strip floating point if there already is one
+                if ( $line =~ /[.]/xms ) { $key =~ s/[.]//xms }
+                $key =~ s/[^.\d-]//xms;
+            }
+
+            my $left_part  = substr $line, 0, $bufpos;
+            my $right_part = q{};
+
+            if ( $bufpos < $len )
+            {
+                $right_part = substr $line, $bufpos;
+            }
+
+            $line = $left_part . uc( $key ) . $right_part;
+            $len  = length $line;
+
+            $bufpos++;
+            $bufpos = maxcalc( $bufpos, $line );
+        }
+        if ( $type eq 'hex' && $len > int '8' )
+        {
+            $line = $prev_line;
+            $bufpos--;
+            safeprint( "\a" );
+        }
+
+        safeprint( "\r\e[${ col }G$line\e[0K" );
+
+        if ( $bufpos < $len )
+        {
+            safeprint( "\e[" . ( $col + $bufpos ) . 'G' );
+        }
+        $key = ReadKey();
+    }
+
+    # Tab key switches fields
+
+    if ( $key eq chr '9' ) { return $key }
+    return $line;
+}
+
+sub maxcalc
+{
+    my ( $bufpos, $line ) = @_;
+
+    my $len = length $line;
+
+    if    ( $bufpos > $len ) { $bufpos = $len }
+    elsif ( $bufpos < 0 )    { $bufpos = 0 }
+
+    return $bufpos;
+}
+
+sub rubout
+{
+    $bits[ $current_bit-- ] = 0;
+    return;
+}
+
+sub get_frexp
+{
+    my $byte    = 0;
+    my @fbytes  = ();
+    my @offsets = qw( 0 8 16 24 );
+
+    # Calculate decimal values for each byte
+
+    for my $i ( '0' .. '3' )
+    {
+        my $offset = $offsets[ $byte++ ];
+        my $byte_binval;
+
+        for my $nthbit ( '0' .. '7' )
+        {
+            $byte_binval .= $bits[ $offset + $nthbit + 1 ] || '0';
+        }
+
+        my $byte_decval = ord pack 'B8', $byte_binval;
+
+        # Do it backwards, of course
+
+        unshift @fbytes, $byte_decval;
+    }
+
+    # Get exponent in binary (8 bits: 2 to 9)
+
+    my $exponent_bits;
+    for my $b ( @bits[ '02' .. '09' ] ) { $exponent_bits .= $b || '0' }
+
+    # Get mantissa in binary (23 bits: 10 to 32)
+
+    my $mantissa_bits;
+    for my $b ( @bits[ '10' .. '32' ] ) { $mantissa_bits .= $b || '0' }
+
+    # Calculate mantissa from binary
+
+    my $mantissa = 0;
+
+    for my $k ( '10' .. '32' )
+    {
+        if ( $bits[ $k ] ) { $mantissa += 2 ** ( int( '9' ) - int $k ) }
+    }
+
+    # Assign return values
+
+    my $sign     = $bits[ 1 ] ? q{-} : q{+};
+    my $exponent = ord pack 'B8', ( $exponent_bits || 0 );
+    my $float    = unpack 'f', pack 'C4', @fbytes;
+
+    return ( $float, $sign, $exponent, $mantissa, @fbytes );
+}
+
+sub draw
+{
+    println( "\e[H\e[1m$title\e[m" );
+    println();
+
+    # Print bits in byte groups, e.g:
+    # 0 0 0 0 0 0 0 0  0 0 0 0 0 0 0 0  0 0 0 0 0 0 0 0  0 0 0 0 0 0 0 0
+
+    for my $i ( '1' .. '32' )
+    {
+        my $bit = $bits[ $i ] || '0';
+        my $clr;
+
+        # Highlight current bit
+
+        if ( $i == $current_bit ) { $bit = "\e[7m$bit\e[m" }
+
+        if ( $i == 1 )
+        {
+            $clr = $s_clr;
+        }
+        elsif ( $i > 1 && $i < int '10' )
+        {
+            $clr = $e_clr;
+        }
+        else
+        {
+            $clr = $m_clr;
+        }
+
+        if ( !$noclr ) { $bit = "\e[38;5;${ clr }m$bit\e[m" }
+
+        safeprint( "$bit " );
+        if ( $i % int '8' eq '0' ) { safeprint( q{ } ) }
+    }
+
+    # Enable faint text character attributes
+
+    println( "\e[2m" );
+
+    # Print 'comb'
+
+    for my $i ( '0' .. '3' ) { safeprint( $comb ) }
+    println();
+
+    # Get number components
+
+    my ( $float, $sign, $exponent, $mantissa, @fbytes ) = get_frexp();
+    my $hexfloat = '0x' . uc unpack 'H*', reverse pack 'f', $float;
+
+    # Print byte values as hexadecimal/decimal
+
+    my $i;
+    for my $column ( reverse '2', '19', '36', '53' )
+    {
+        my $byte_decval = $fbytes[ $i++ ];
+        my $byte_hexval = sprintf '%02X', $byte_decval;
+        safeprint( "\e[${ column }G0x$byte_hexval ($byte_decval)   " );
+    }
+
+    # Disable all character attributes
+
+    println( "\e[m" );
+
+    # Print summary in appropriate colours
+
+    my $pfx = "\e[7m\e[38;5;";
+
+    println();
+    if ( $noclr )
+    {
+        println( " Sign bit: $sign\e[0K" );
+        println( " Exponent: $exponent\e[0K" );
+        println( " Mantissa: $mantissa\e[0K" );
+    }
+    else
+    {
+        println( "$pfx${ s_clr }m Sign bit:\e[m $sign\e[0K" );
+        println( "$pfx${ e_clr }m Exponent:\e[m $exponent\e[0K" );
+        println( "$pfx${ m_clr }m Mantissa:\e[m $mantissa\e[0K" );
+    }
+
+    # Print float value in various forms
+
+    println( "\e[7m\e[1m" . sprintf '%9s:%s', 'Dec', "\e[m $float\e[0K" );
+    println( "\e[7m\e[1m" . sprintf '%9s:%s', 'Hex', "\e[m $hexfloat\e[0K" );
+
+    return;
+}
+
+sub show_help
+{
+    my $b       = "\e[1m";
+    my $r       = "\e[m";
+    my $manfile = <<"EOF";
+${b}NAME$r
+        ${b}$prog$r - Present IEEE 754 floating point values
+
+${b}SYNOPSIS$r
+        # Run with no options for interactive mode
+        $PROGRAM_NAME
+
+${b}DESCRIPTION$r
+    Provides a visual representation of IEEE 754 floating point
+    numbers.  In interactive mode the following keys are available:
+
+        - Left / right arrow-keys to navigate bit array
+        - Up / down arrow-keys to flip bits on or off
+        - 1 / 0 keys to input bits manually
+        - + / - keys to adjust colour index
+        - Delete / backspace to set current bit to 0
+        - Tab key / ^I (Control-I) to switch fields for direct input
+        - ? / H key to show this help document
+
+    Options
+        [-? | -help ]
+            Show this help document and quit
+
+        [-decimal] <value>
+            Present decimal <value> and quit
+
+        [-hexadecimal] <decimal value>
+            Present hexadecimal <value> and quit
+
+        [-nocolour]
+            Do not use colours (colours are 16-bit)
+
+        [-colour] <index>
+            Adjust colour index (range: -80 to 175)
+
+        [-unicode]
+            Use Unicode characters (default is DEC Special Graphics)
+
+        [-ascii]
+            Use ASCII characters only
+
+        [-version]
+            Print current version and quit
+
+    Examples
+        # Display hex value with no colour
+        $PROGRAM_NAME -n -hex deadbeef
+
+        # Display decimal value
+        $PROGRAM_NAME -d 123
+
+${b}BUGS$r
+    * None known
+
+${b}SOURCE AVAILABILITY$r
+    Source code is available on Github (https://github.com/thunderpoot/$prog/)
+
+${b}CREDITS$r
+    Devon (https://github.com/telnet23) for help with Perl syntax
+    and mathematics
+
+    Bartosz Ciechanowski (https://ciechanow.ski/exposing-floating-point/)
+    and (https://float.exposed/)
+
+${b}AUTHOR$r
+    Underwood, "<underwood\@underwood.network>"
+
+${b}COPYRIGHT$r
+    Copyright (c) 2023, All Rights Reserved.
+
+    You may modify and redistribute this software only if this documentation
+    remains intact.
+
+${b}SEE ALSO$r
+    float(3), math(3), complex(3)
+
+    RFC 6340 (https://www.rfc-editor.org/rfc/rfc6340.html)
+
+${b}STANDARDS$r
+    Floating-point arithmetic conforms to the ISO/IEC 9899:2011 standard.
+
+EOF
+
+    my $pager = IO::Pager::Buffered->new();
+    $pager->print( $manfile );
+
+    return;
+}
+
+startup();
+
+while ( 'tood' ne 'doot' )
+{
+    # Get user input for bit array
+
+    my $key = ReadKey();
+
+    my $actions = {
+        chr( '127' ) => sub { rubout() },
+        chr( '8' )   => sub { rubout() },
+        chr( '9' )   => sub { set_value( 'dec' ) },
+        'A'  => sub { $bits[ $current_bit ]   = !$bits[ $current_bit ] },
+        'B'  => sub { $bits[ $current_bit ]   = !$bits[ $current_bit ] },
+        '1'  => sub { $bits[ $current_bit++ ] = 1 },
+        '0'  => sub { $bits[ $current_bit++ ] = 0 },
+        'C'  => sub { $current_bit++ },
+        'D'  => sub { $current_bit-- },
+        'Q'  => sub { quit() },
+        'q'  => sub { quit() },
+        'h'  => sub { show_help() },
+        'H'  => sub { show_help() },
+        q{?} => sub { show_help() },
+        q{+} => sub {
+            for my $clr ( $s_clr, $e_clr, $m_clr )
+            {
+                $clr++;
+                if ( $clr > int '391' )
+                {
+                    ( $s_clr, $e_clr, $m_clr ) = init_colours( 'min' );
+                }
+            }
+        },
+        q{-} => sub {
+            for my $clr ( $s_clr, $e_clr, $m_clr )
+            {
+                $clr--;
+                if ( $clr < int '001' )
+                {
+                    ( $s_clr, $e_clr, $m_clr ) = init_colours( 'max' );
+                }
+            }
+        },
+        q{3} => sub {
+            $key = ReadKey();
+            if ( $key eq q{~} ) { $bits[ $current_bit++ ] = 0 }
+        }
+    };
+
+    if ( defined $actions->{ $key } )
+    {
+        $actions->{ $key }->();
+
+        if    ( $current_bit > int '32' ) { $current_bit = int '1' }
+        elsif ( $current_bit < int '1' )  { $current_bit = int '32' }
+
+        draw();
+    }
+}
+
+1;

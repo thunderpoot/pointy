@@ -1,0 +1,9 @@
+-pt=0      # Parenthesis tightness
+-bt=0      # Brace tightness
+-sbt=0     # Square-brace tightness
+-bl        # Drop braces to new line
+-i=4       # Indentation 4 spaces
+-lp        # Line-up parentheses
+-ibc       # Indent block comments
+-wls="**"  # Want left space (before **)
+-wrs="**"  # Want right space (after **)
