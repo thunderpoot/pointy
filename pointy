@@ -1,9 +1,11 @@
 #!/usr/bin/env perl
 
-package Pointy 0.1;
+package Pointy 0.2;
 
 use strict;
 use warnings;
+
+use Env;
 use Term::ReadKey;
 use String::ShellQuote;
 use Getopt::Long;
@@ -94,12 +96,14 @@ sub startup
     {
         populate( unpack 'H*', reverse pack 'f', $dec_inp );
         oneshot();
+        quit();
     }
     elsif ( defined $hex_inp )
     {
         $hex_inp =~ s/^0x//xmsi;
         populate( $hex_inp );
         oneshot();
+        quit();
     }
 
     # Disable cursor
@@ -116,9 +120,9 @@ sub init_colours
     # Colours for sign, exponent, and mantissa
 
     $clrind //= 0;
-    if ( $clrind < -80 || $clrind > 175)
+    if ( $clrind < int '-80' || $clrind > int '175' )
     {
-        println( "Colour index out of range: -80 to 175" );
+        println( 'Colour index out of range: -80 to 175' );
         exit 1;
     }
 
@@ -138,9 +142,9 @@ sub init_colours
     }
     else
     {
-        $s = '114' + $clrind;
-        $e = '80'  + $clrind;
-        $m = '216' + $clrind;
+        $s = int( '114' ) + $clrind;
+        $e = int( '80' ) + $clrind;
+        $m = int( '216' ) + $clrind;
     }
 
     return ( $s, $e, $m );
@@ -165,7 +169,7 @@ sub oneshot
     $current_bit = 0;
     draw();
     println();
-    quit();
+    return;
 }
 
 sub set_value
@@ -509,9 +513,9 @@ sub draw
         if ( $i % int '8' eq '0' ) { safeprint( q{ } ) }
     }
 
-    # Enable faint text character attributes
+    # Enable faint text character attribute if term can definitely handle it
 
-    println( "\e[2m" );
+    if ( $ENV{ TERM } =~ /xterm/xms ) { println( "\e[2m" ) }
 
     # Print 'comb'
 
@@ -565,15 +569,16 @@ sub draw
 
 sub show_help
 {
+    my $lcprog  = lc $prog;
     my $b       = "\e[1m";
     my $r       = "\e[m";
     my $manfile = <<"EOF";
 ${b}NAME$r
-        ${b}$prog$r - Present IEEE 754 floating point values
+    ${b}$lcprog$r - Present IEEE 754 floating point values
 
 ${b}SYNOPSIS$r
-        # Run with no options for interactive mode
-        $PROGRAM_NAME
+    # Run with no options for interactive mode
+    $PROGRAM_NAME
 
 ${b}DESCRIPTION$r
     Provides a visual representation of IEEE 754 floating point
@@ -586,6 +591,7 @@ ${b}DESCRIPTION$r
         - Delete / backspace to set current bit to 0
         - Tab key / ^I (Control-I) to switch fields for direct input
         - ? / H key to show this help document
+        - Q key or ^C (Control-C) to quit
 
     Options
         [-? | -help ]
@@ -623,7 +629,7 @@ ${b}BUGS$r
     * None known
 
 ${b}SOURCE AVAILABILITY$r
-    Source code is available on Github (https://github.com/thunderpoot/$prog/)
+    Source code is available on Github (https://github.com/thunderpoot/$lcprog/)
 
 ${b}CREDITS$r
     Devon (https://github.com/telnet23) for help with Perl syntax
@@ -651,8 +657,14 @@ ${b}STANDARDS$r
 
 EOF
 
+    # Strip bold text sequences if the pager won't display them properly
+
+    if ( $ENV{ PAGER } !~ /less/xms ) { $manfile =~ s/\e\[1?m//gxms }
+
     my $pager = IO::Pager::Buffered->new();
     $pager->print( $manfile );
+
+    safeprint( "\e[2J" );
 
     return;
 }

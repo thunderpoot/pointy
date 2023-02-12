@@ -13,6 +13,8 @@
 git clone https://github.com/thunderpoot/pointy.git /tmp/pointy && cp /tmp/pointy/pointy /usr/local/bin && rm -rf /tmp/pointy
 ```
 
+See [How to Install CPAN Modules](http://www.cpan.org/modules/INSTALL.html) for help with installing required modules.
+
 ### Readme
 
 ```
