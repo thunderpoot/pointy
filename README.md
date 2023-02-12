@@ -21,7 +21,7 @@ NAME
 
 SYNOPSIS
         # Run with no options for interactive mode
-        ./pointy
+        pointy
 
 DESCRIPTION
     Provides a visual representation of IEEE 754 floating point
@@ -62,10 +62,10 @@ DESCRIPTION
 
     Examples
         # Display hex value with no colour
-        ./pointy -n -hex deadbeef
+        pointy -n -hex deadbeef
 
         # Display decimal value
-        ./pointy -d 123
+        pointy -d 123
 
 BUGS
     * None known
