@@ -44,7 +44,7 @@ DESCRIPTION
         [-decimal] <value>
             Present decimal <value> and quit
 
-        [-hexadecimal] <decimal value>
+        [-hexadecimal] <value>
             Present hexadecimal <value> and quit
 
         [-nocolour]
