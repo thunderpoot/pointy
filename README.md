@@ -10,7 +10,7 @@
 
 ### Installation
 ```
-git clone https://github.com/thunderpoot/pointy.git pointy && cp pointy/pointy /usr/local/bin
+git clone https://github.com/thunderpoot/pointy.git /tmp/pointy && cp /tmp/pointy/pointy /usr/local/bin && rm -rf /tmp/pointy
 ```
 
 ### Readme
