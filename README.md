@@ -19,7 +19,7 @@ See [How to Install CPAN Modules](http://www.cpan.org/modules/INSTALL.html) for 
 
 ```
 NAME
-        Pointy - Present IEEE 754 floating point values
+        pointy - Present IEEE 754 floating point values
 
 SYNOPSIS
         # Run with no options for interactive mode
@@ -73,7 +73,7 @@ BUGS
     * None known
 
 SOURCE AVAILABILITY
-    Source code is available on Github (https://github.com/thunderpoot/Pointy/)
+    Source code is available on Github (https://github.com/thunderpoot/pointy/)
 
 CREDITS
     Devon (https://github.com/telnet23) for help with Perl syntax
