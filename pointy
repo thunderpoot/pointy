@@ -24,7 +24,7 @@ ReadMode( 'cbreak' );
 
 my $prog        = __PACKAGE__;
 my $vers        = $prog->VERSION;
-my $title       = "$prog v $vers";
+my $title       = "$prog version $vers";
 my $comb        = "\e(0mqvqvqvqvqvqvqj  \e(B";
 my $current_bit = 1;
 my @bits        = ();
@@ -479,7 +479,7 @@ sub get_frexp
 
 sub draw
 {
-    println( "\e[H\e[1m$title\e[m" );
+    println( "\e[H\e[1m$prog\e[m" );
     println();
 
     # Print bits in byte groups, e.g:
