@@ -594,7 +594,7 @@ ${b}DESCRIPTION$r
         - Q key or ^C (Control-C) to quit
 
     Options
-        [-? | -help ]
+        [-\? | -help ]
             Show this help document and quit
 
         [-decimal] <value>
@@ -663,8 +663,6 @@ EOF
 
     my $pager = IO::Pager::Buffered->new();
     $pager->print( $manfile );
-
-    safeprint( "\e[2J" );
 
     return;
 }
