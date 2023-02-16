@@ -1,10 +1,8 @@
-![Perl](https://img.shields.io/badge/perl-%2339457E.svg?style=for-the-badge&logo=perl&logoColor=white)
+![Perl](https://img.shields.io/badge/perl-%2339457E.svg?style=for-the-badge&logo=perl&logoColor=white)![CLI](https://telehack.com/cmd.svg)
 
-## Pointy
+## pointy
 
-### What is it?
-
-**Pointy** is a command-line tool for visualising IEEE 754 floating point values, written in Perl.
+**`pointy`** is a command-line tool for visualising IEEE 754 floating point values, written in Perl.
 
 ![Pointy](./pointy.png)
 
