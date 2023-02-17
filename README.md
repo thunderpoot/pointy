@@ -75,7 +75,7 @@ BUGS
     * None known
 
 SOURCE AVAILABILITY
-    Source code is available on Github (https://github.com/thunderpoot/pointy/)
+    Source code is available on GitHub (https://github.com/thunderpoot/pointy/)
 
 CREDITS
     Devon (https://github.com/telnet23) for help with Perl syntax
