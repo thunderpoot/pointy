@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-package Pointy 0.2;
+package Pointy v0.2.1;
 
 use strict;
 use warnings;
@@ -513,9 +513,11 @@ sub draw
         if ( $i % int '8' eq '0' ) { safeprint( q{ } ) }
     }
 
+    println();
+
     # Enable faint text character attribute if term can definitely handle it
 
-    if ( $ENV{ TERM } =~ /xterm/xms ) { println( "\e[2m" ) }
+    if ( $ENV{ TERM } =~ /xterm/xms ) { safeprint( "\e[2m" ) }
 
     # Print 'comb'
 
